@@ -1,0 +1,5 @@
+[env]
+# Force use of Xcode's C++ compiler instead of Homebrew's
+CXX = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++"
+CC = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang"
+

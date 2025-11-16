@@ -1,0 +1,30 @@
+# Rust
+rust-lib/target/
+rust-lib/Cargo.lock
+
+# Generated bridge headers (copied by CMake from Rust build)
+rust-lib/src/lib.rs.h
+rust-lib/src/lib.rs.cc
+rust-lib/src/cxx.h
+
+# C++
+*.o
+*.out
+demo
+build/
+
+# IDE
+# .vscode/ - keeping this for project-specific C++ config
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
