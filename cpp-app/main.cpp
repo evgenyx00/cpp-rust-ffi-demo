@@ -1,11 +1,17 @@
-// Include the cxx-generated header
+// Include our C++ definitions (existing C++ code)
+#include "person.h"
+
+// Include the cxx-generated header (for Rust FFI)
 #include "rust-lib/src/lib.rs.h"
+
 #include <iostream>
 #include <string>
+#include <memory>
 
-void print_person_info(const PersonInfo& info, const rust::String& name) {
-    std::cout << "\n=== Person Information ===" << std::endl;
-    std::cout << "Name: " << std::string(name) << std::endl;
+// Helper function to print PersonInfo results from Rust
+void print_person_info(const PersonInfo& info, const std::string& name) {
+    std::cout << "\n=== Person Information (from Rust analysis) ===" << std::endl;
+    std::cout << "Name: " << name << std::endl;
     std::cout << "Name length: " << info.name_length << std::endl;
     std::cout << "City: " << std::string(info.city) << std::endl;
     std::cout << "Is adult: " << (info.is_adult ? "Yes" : "No") << std::endl;
@@ -24,108 +30,146 @@ void print_person_info(const PersonInfo& info, const rust::String& name) {
         default:
             std::cout << "Unknown" << std::endl;
     }
-    std::cout << "=========================\n" << std::endl;
+    std::cout << "============================================\n" << std::endl;
 }
 
-// Helper function to create an Address (demonstrating nested struct construction)
-Address create_address(const std::string& street, const std::string& city, const std::string& postal) {
-    return Address{
-        .street = rust::String(street),
-        .city = rust::String(city),
-        .postal_code = rust::String(postal)
-    };
-}
-
-// Helper function to create ContactInfo (demonstrating nested struct construction)
-ContactInfo create_contact(const std::string& email, const std::string& phone, const Address& addr) {
-    return ContactInfo{
-        .email = rust::String(email),
-        .phone = rust::String(phone),
-        .address = addr
-    };
+// Helper function to print HealthAnalysis results from Rust
+void print_health_analysis(const HealthAnalysis& analysis, const std::string& name) {
+    std::cout << "\n=== Health Analysis for " << name << " (Rust) ===" << std::endl;
+    std::cout << "BMI: " << analysis.bmi << std::endl;
+    std::cout << "Risk Score: " << analysis.risk_score << std::endl;
+    std::cout << "City Risk Factor: " << analysis.city_risk_factor << std::endl;
+    std::cout << "Recommendation: " << std::string(analysis.recommendation) << std::endl;
+    std::cout << "============================================\n" << std::endl;
 }
 
 int main() {
-    std::cout << "C++ ↔ Rust FFI Demo with Nested Structs using cxx::bridge\n" << std::endl;
-    std::cout << "Demonstrating: C++ passing nested structures to Rust\n" << std::endl;
+    std::cout << "C++ ↔ Rust FFI Demo with Opaque C++ Types\n" << std::endl;
+    std::cout << "Demonstrating: Real-world integration pattern" << std::endl;
+    std::cout << "- C++ classes defined in C++ code (person.h)" << std::endl;
+    std::cout << "- Rust treats them as opaque types" << std::endl;
+    std::cout << "- New Rust functionality works with existing C++ objects\n" << std::endl;
     
-    // Example 1: Simple greeting with string
+    // Example 1: Simple greeting
     std::cout << "--- Example 1: String Handling ---" << std::endl;
     size_t length = greet_person("Alice");
     std::cout << "Returned name length: " << length << "\n" << std::endl;
     
-    // Example 2: Create nested Person struct in C++ and pass to Rust
-    std::cout << "--- Example 2: Adult Person with Nested Structs (C++ → Rust) ---" << std::endl;
-    Address addr1 = create_address("123 Main St", "New York", "10001");
-    ContactInfo contact1 = create_contact("bob@example.com", "555-1234", addr1);
+    // Example 2: Create C++ objects using our existing C++ classes
+    std::cout << "--- Example 2: C++ Objects → Rust Processing ---" << std::endl;
     
-    Person adult{
-        .age = 25,
-        .height = 1.75,
-        .name = rust::String("Bob Johnson"),
-        .contact = contact1
-    };
+    // Create Address (our C++ class)
+    auto addr1 = std::make_shared<Address>("123 Main St", "New York", "10001");
     
-    PersonInfo adult_info = process_person(adult);
-    print_person_info(adult_info, adult.name);
+    // Create ContactInfo (our C++ class with nested Address)
+    auto contact1 = std::make_shared<ContactInfo>("bob@example.com", "555-1234", addr1);
     
-    // Example 3: Minor person with nested structs
-    std::cout << "--- Example 3: Minor Person with Nested Structs (C++ → Rust) ---" << std::endl;
-    Address addr2 = create_address("456 Oak Ave", "Boston", "02101");
-    ContactInfo contact2 = create_contact("charlie@example.com", "555-5678", addr2);
+    // Create Person (our C++ class)
+    auto person1 = std::make_unique<Person>(25, 1.75, "Bob Johnson", contact1);
     
-    Person minor{
-        .age = 16,
-        .height = 1.60,
-        .name = rust::String("Charlie Smith"),
-        .contact = contact2
-    };
+    std::cout << "Created C++ Person: " << person1->name() << std::endl;
+    std::cout << "Age: " << person1->age() << ", Height: " << person1->height() << "m" << std::endl;
+    std::cout << "City: " << person1->contact().address().city() << std::endl;
     
-    PersonInfo minor_info = process_person(minor);
-    print_person_info(minor_info, minor.name);
+    // Pass C++ object to Rust for processing
+    std::cout << "\nSending to Rust for analysis..." << std::endl;
+    PersonInfo info1 = process_person(*person1);
+    print_person_info(info1, person1->name());
     
-    // Example 4: Inline nested struct construction
-    std::cout << "--- Example 4: Inline Nested Struct Construction ---" << std::endl;
-    Person inline_person{
-        .age = 30,
-        .height = 1.90,
-        .name = rust::String("Diana Rodriguez"),
-        .contact = ContactInfo{
-            .email = rust::String("diana@example.com"),
-            .phone = rust::String("555-9999"),
-            .address = Address{
-                .street = rust::String("789 Pine Rd"),
-                .city = rust::String("San Francisco"),
-                .postal_code = rust::String("94102")
-            }
-        }
-    };
+    // Example 3: New Rust functionality - Health Analysis
+    std::cout << "--- Example 3: Advanced Health Analysis (New Rust Feature) ---" << std::endl;
+    double weight1 = 75.0; // kg
+    HealthAnalysis health1 = analyze_health(*person1, weight1);
+    print_health_analysis(health1, person1->name());
     
-    PersonInfo inline_info = process_person(inline_person);
-    print_person_info(inline_info, inline_person.name);
+    // Example 4: Minor person
+    std::cout << "--- Example 4: Minor Person Analysis ---" << std::endl;
+    auto addr2 = std::make_shared<Address>("456 Oak Ave", "Boston", "02101");
+    auto contact2 = std::make_shared<ContactInfo>("charlie@example.com", "555-5678", addr2);
+    auto person2 = std::make_unique<Person>(16, 1.60, "Charlie Smith", contact2);
     
-    // Example 5: Calculate BMI directly
-    std::cout << "--- Example 5: Direct Function Call ---" << std::endl;
+    std::cout << "Created C++ Person: " << person2->name() << std::endl;
+    PersonInfo info2 = process_person(*person2);
+    print_person_info(info2, person2->name());
+    
+    double weight2 = 55.0; // kg
+    HealthAnalysis health2 = analyze_health(*person2, weight2);
+    print_health_analysis(health2, person2->name());
+    
+    // Example 5: Contact validation (new Rust functionality)
+    std::cout << "--- Example 5: Contact Validation (Rust) ---" << std::endl;
+    bool valid1 = validate_contact(person1->contact());
+    bool valid2 = validate_contact(person2->contact());
+    
+    std::cout << person1->name() << "'s contact is " 
+              << (valid1 ? "VALID ✓" : "INVALID ✗") << std::endl;
+    std::cout << person2->name() << "'s contact is " 
+              << (valid2 ? "VALID ✓" : "INVALID ✗") << std::endl;
+    std::cout << std::endl;
+    
+    // Example 6: Invalid contact
+    std::cout << "--- Example 6: Testing Invalid Contact ---" << std::endl;
+    auto bad_addr = std::make_shared<Address>("", "", "123");
+    auto bad_contact = std::make_shared<ContactInfo>("bademail", "123", bad_addr);
+    auto person3 = std::make_unique<Person>(30, 1.80, "Invalid User", bad_contact);
+    
+    bool valid3 = validate_contact(person3->contact());
+    std::cout << person3->name() << "'s contact is " 
+              << (valid3 ? "VALID ✓" : "INVALID ✗") << std::endl;
+    std::cout << std::endl;
+    
+    // Example 7: Direct BMI calculation
+    std::cout << "--- Example 7: Direct BMI Calculation (Pure Rust) ---" << std::endl;
     double bmi = calculate_bmi(70.0, 1.75);
     std::cout << "BMI for 70kg, 1.75m: " << bmi << std::endl;
     std::cout << std::endl;
     
-    // Example 6: Accessing nested fields from C++
-    std::cout << "--- Example 6: Accessing Nested Fields in C++ ---" << std::endl;
-    std::cout << "Bob's email: " << std::string(adult.contact.email) << std::endl;
-    std::cout << "Bob's city: " << std::string(adult.contact.address.city) << std::endl;
-    std::cout << "Charlie's phone: " << std::string(minor.contact.phone) << std::endl;
-    std::cout << "Charlie's street: " << std::string(minor.contact.address.street) << std::endl;
+    // Example 8: Using C++ methods alongside Rust functions
+    std::cout << "--- Example 8: C++ Methods + Rust Functions ---" << std::endl;
+    std::cout << "Bob's age (C++ method): " << person1->age() << std::endl;
+    std::cout << "Bob is adult (C++ method): " << (person1->is_adult() ? "Yes" : "No") << std::endl;
+    std::cout << "Bob's BMI from C++ method: " << person1->calculate_bmi(75.0) << std::endl;
+    std::cout << "Bob's BMI from Rust function: " << calculate_bmi(75.0, person1->height()) << std::endl;
+    
+    // Using factory functions to create objects
+    std::cout << "\n--- Example 9: Using Factory Functions ---" << std::endl;
+    auto addr3 = create_address("789 Pine Rd", "San Francisco", "94102");
+    std::cout << "Created address: " << addr3->city() << std::endl;
     
     std::cout << "\n✅ Demo completed successfully!" << std::endl;
-    std::cout << "\nKey Features Demonstrated:" << std::endl;
-    std::cout << "  ✓ Nested C++ structures (Address → ContactInfo → Person)" << std::endl;
-    std::cout << "  ✓ C++ structures passed to Rust functions" << std::endl;
-    std::cout << "  ✓ Accessing nested fields from both C++ and Rust" << std::endl;
-    std::cout << "  ✓ Automatic String ↔ std::string conversion" << std::endl;
-    std::cout << "  ✓ Type-safe interface (compile-time checked)" << std::endl;
-    std::cout << "  ✓ No raw pointers or unsafe code needed" << std::endl;
-    std::cout << "  ✓ Modern C++ ergonomics with designated initializers" << std::endl;
+    std::cout << "\n╔══════════════════════════════════════════════════════════╗" << std::endl;
+    std::cout << "║         Key Integration Patterns Demonstrated            ║" << std::endl;
+    std::cout << "╚══════════════════════════════════════════════════════════╝" << std::endl;
+    std::cout << "\n✓ C++ Classes Defined in C++ Code" << std::endl;
+    std::cout << "  - Person, ContactInfo, Address classes in person.h" << std::endl;
+    std::cout << "  - Full C++ encapsulation with private fields" << std::endl;
+    std::cout << "  - C++ methods and business logic preserved" << std::endl;
+    
+    std::cout << "\n✓ Opaque Types in Rust" << std::endl;
+    std::cout << "  - Rust declares C++ types but doesn't see inside" << std::endl;
+    std::cout << "  - Uses getter functions to access data" << std::endl;
+    std::cout << "  - Type-safe at compile time" << std::endl;
+    
+    std::cout << "\n✓ New Rust Functionality" << std::endl;
+    std::cout << "  - process_person() analyzes C++ objects" << std::endl;
+    std::cout << "  - analyze_health() adds new features" << std::endl;
+    std::cout << "  - validate_contact() provides safe validation" << std::endl;
+    
+    std::cout << "\n✓ Bridge Structs for Results" << std::endl;
+    std::cout << "  - PersonInfo and HealthAnalysis" << std::endl;
+    std::cout << "  - Used only for data exchange (Rust → C++)" << std::endl;
+    std::cout << "  - Shared between both languages" << std::endl;
+    
+    std::cout << "\n✓ Best Practices" << std::endl;
+    std::cout << "  - Minimal changes to existing C++ code" << std::endl;
+    std::cout << "  - Gradual Rust adoption" << std::endl;
+    std::cout << "  - No unsafe code in Rust" << std::endl;
+    std::cout << "  - Clear separation of concerns" << std::endl;
+    
+    std::cout << "\n╔══════════════════════════════════════════════════════════╗" << std::endl;
+    std::cout << "║  This is the RECOMMENDED approach for integrating Rust   ║" << std::endl;
+    std::cout << "║  into existing C++ codebases!                            ║" << std::endl;
+    std::cout << "╚══════════════════════════════════════════════════════════╝\n" << std::endl;
     
     return 0;
 }

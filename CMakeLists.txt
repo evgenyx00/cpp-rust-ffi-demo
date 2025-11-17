@@ -61,8 +61,11 @@ set_target_properties(rust_lib PROPERTIES
     IMPORTED_LOCATION "${RUST_TARGET_DIR}/${RUST_LIB_NAME}"
 )
 
-# C++ executable
-add_executable(demo cpp-app/main.cpp)
+# C++ executable with sources
+add_executable(demo 
+    cpp-app/main.cpp
+    cpp-app/person.cpp
+)
 
 # Make sure Rust library is built before the C++ executable
 add_dependencies(demo build_rust)
