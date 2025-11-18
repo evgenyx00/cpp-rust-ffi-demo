@@ -1,3 +1,10 @@
+# Alternative CMakeLists.txt for dynamic linking
+# To use this:
+#   1. Backup current CMakeLists.txt: cp CMakeLists.txt CMakeLists.txt.static
+#   2. Copy this file: cp CMakeLists.txt.dynamic CMakeLists.txt
+#   3. Update rust-lib/Cargo.toml to use crate-type = ["cdylib"]
+#   4. Rebuild: ./build.sh
+
 cmake_minimum_required(VERSION 3.15)
 project(cpp_rust_ffi_demo)
 
@@ -8,15 +15,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Generate compile_commands.json for IDE support
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Platform detection
+# Platform detection for DYNAMIC LIBRARY
 if(APPLE)
-    set(RUST_LIB_NAME "librust_lib.a")
+    set(RUST_LIB_NAME "librust_lib.dylib")
     set(RUST_TARGET_DIR "${CMAKE_SOURCE_DIR}/rust-lib/target/release")
 elseif(WIN32)
-    set(RUST_LIB_NAME "rust_lib.lib")
+    set(RUST_LIB_NAME "rust_lib.dll")
     set(RUST_TARGET_DIR "${CMAKE_SOURCE_DIR}/rust-lib/target/release")
 else()
-    set(RUST_LIB_NAME "librust_lib.a")
+    set(RUST_LIB_NAME "librust_lib.so")
     set(RUST_TARGET_DIR "${CMAKE_SOURCE_DIR}/rust-lib/target/release")
 endif()
 
@@ -24,7 +31,7 @@ endif()
 add_custom_target(build_rust
     COMMAND cargo build --release
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/rust-lib
-    COMMENT "Building Rust library with cxx bridge..."
+    COMMENT "Building Rust dynamic library with cxx bridge..."
 )
 
 # Find the cxx-generated headers dynamically and copy to rust-lib/src/
@@ -55,8 +62,8 @@ else()
     message(WARNING "cxx bridge directory not found. Run: cd rust-lib && cargo build --release")
 endif()
 
-# Create imported library target for Rust library
-add_library(rust_lib STATIC IMPORTED)
+# Create imported library target for Rust library (DYNAMIC)
+add_library(rust_lib SHARED IMPORTED)
 set_target_properties(rust_lib PROPERTIES
     IMPORTED_LOCATION "${RUST_TARGET_DIR}/${RUST_LIB_NAME}"
 )
@@ -82,12 +89,24 @@ if(APPLE)
         dl
         c++
     )
+    
+    # Set rpath so the executable can find the dynamic library
+    set_target_properties(demo PROPERTIES
+        BUILD_RPATH "${RUST_TARGET_DIR}"
+        INSTALL_RPATH "@executable_path/../lib"
+    )
 elseif(UNIX)
     target_link_libraries(demo PRIVATE
         pthread
         dl
         m
         stdc++
+    )
+    
+    # Set rpath for Linux
+    set_target_properties(demo PROPERTIES
+        BUILD_RPATH "${RUST_TARGET_DIR}"
+        INSTALL_RPATH "$ORIGIN/../lib"
     )
 elseif(WIN32)
     target_link_libraries(demo PRIVATE
@@ -98,6 +117,9 @@ elseif(WIN32)
 endif()
 
 # Print configuration info
+message(STATUS "*** DYNAMIC LINKING CONFIGURATION ***")
 message(STATUS "Rust library path: ${RUST_TARGET_DIR}/${RUST_LIB_NAME}")
 message(STATUS "CXX bridge headers: ${RUST_TARGET_DIR}/cxxbridge/")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "Library type: SHARED (dynamic)")
+

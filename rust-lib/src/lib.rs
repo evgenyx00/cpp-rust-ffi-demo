@@ -1,58 +1,107 @@
 #[cxx::bridge]
 mod ffi {
-    // Nested struct example: Address information
-    struct Address {
-        street: String,
-        city: String,
-        postal_code: String,
+    // ============================================================================
+    // OPAQUE C++ TYPES - Defined in C++ code (person.h)
+    // Rust can hold references but cannot see inside these types
+    // ============================================================================
+    unsafe extern "C++" {
+        include!("cpp-app/person.h");
+        
+        // Opaque C++ types - these are existing C++ classes
+        // Rust cannot see inside these types, only hold references
+        type Person;
+        type ContactInfo;
+        type Address;
+        
+        // Getter functions to access C++ object data from Rust
+        // These are the bridge between opaque C++ types and Rust
+        fn get_person_age(person: &Person) -> u32;
+        fn get_person_height(person: &Person) -> f64;
+        fn get_person_name(person: &Person) -> &CxxString;
+        fn get_person_contact(person: &Person) -> &ContactInfo;
+        
+        fn get_contact_email(contact: &ContactInfo) -> &CxxString;
+        fn get_contact_phone(contact: &ContactInfo) -> &CxxString;
+        fn get_contact_address(contact: &ContactInfo) -> &Address;
+        
+        fn get_address_street(address: &Address) -> &CxxString;
+        fn get_address_city(address: &Address) -> &CxxString;
+        fn get_address_postal_code(address: &Address) -> &CxxString;
     }
 
-    // Nested struct example: Contact information (contains Address)
-    struct ContactInfo {
-        email: String,
-        phone: String,
-        address: Address,
-    }
-
-    // A shared struct representing a person with nested ContactInfo
-    // This struct is shared between C++ and Rust
-    struct Person {
-        age: u32,
-        height: f64,
-        name: String,
-        contact: ContactInfo,
-    }
-
-    // Result struct with computed information
+    // ============================================================================
+    // BRIDGE STRUCTS - For data exchange between Rust and C++
+    // These are new structs created specifically for passing results
+    // ============================================================================
+    
+    /// Result struct with computed information from Rust
+    /// This is NOT a C++ type - it's a bridge type for communication
     struct PersonInfo {
         is_adult: bool,
         bmi_category: u8,    // 0=underweight, 1=normal, 2=overweight
         name_length: usize,
-        city: String,        // From nested struct
+        city: String,        // Extracted from nested C++ structs
+    }
+    
+    /// Health analysis result - new Rust functionality
+    struct HealthAnalysis {
+        bmi: f64,
+        risk_score: f64,
+        recommendation: String,
+        city_risk_factor: f64,
     }
 
-    // Rust functions callable from C++
+    // ============================================================================
+    // RUST FUNCTIONS - New functionality exposed to C++
+    // These work with opaque C++ types and return bridge structs
+    // ============================================================================
     extern "Rust" {
+        /// Process a C++ Person object and return computed information
+        /// Demonstrates: Rust receiving opaque C++ type and extracting data via getters
         fn process_person(person: &Person) -> PersonInfo;
+        
+        /// Perform health analysis on a C++ Person object
+        /// Demonstrates: New Rust functionality working with existing C++ types
+        fn analyze_health(person: &Person, weight_kg: f64) -> HealthAnalysis;
+        
+        /// Simple greeting function
         fn greet_person(name: &str) -> usize;
+        
+        /// Calculate BMI - pure Rust calculation
         fn calculate_bmi(weight_kg: f64, height_m: f64) -> f64;
+        
+        /// Validate contact info - demonstrates deep access into nested C++ objects
+        fn validate_contact(contact: &ContactInfo) -> bool;
     }
 }
 
-/// Process a Person struct and return computed information
+// ============================================================================
+// RUST IMPLEMENTATIONS
+// These functions work with opaque C++ types using getter functions
+// ============================================================================
+
+/// Process a C++ Person object and return computed information
 /// 
-/// This function demonstrates:
-/// - Receiving a C++ struct in Rust
-/// - Accessing nested struct fields
-/// - Accessing String fields (automatic conversion!)
-/// - Returning a Rust struct to C++
+/// This demonstrates the typical pattern:
+/// 1. Receive opaque C++ type as reference
+/// 2. Use getter functions to extract needed data
+/// 3. Perform Rust logic
+/// 4. Return bridge struct with results
 fn process_person(person: &ffi::Person) -> ffi::PersonInfo {
-    // Determine if person is an adult (18+)
-    let is_adult = person.age >= 18;
+    // Extract data from C++ object using getter functions
+    let age = ffi::get_person_age(person);
+    let height = ffi::get_person_height(person);
+    let name = ffi::get_person_name(person);
+    let contact = ffi::get_person_contact(person);
+    let address = ffi::get_contact_address(contact);
+    let city = ffi::get_address_city(address);
+    
+    // Rust logic - determine if person is an adult
+    let is_adult = age >= 18;
     
     // Calculate BMI category (simplified with assumed weight)
     let assumed_weight_kg = 70.0;
-    let bmi = assumed_weight_kg / (person.height * person.height);
+    let bmi = assumed_weight_kg / (height * height);
     
     let bmi_category = if bmi < 18.5 {
         0 // underweight
@@ -62,23 +111,77 @@ fn process_person(person: &ffi::Person) -> ffi::PersonInfo {
         2 // overweight
     };
     
-    // Get name length - direct access to String, no unsafe code!
-    let name_length = person.name.len();
+    // Get name length - CxxString can be used like &str in Rust
+    let name_length = name.to_str().map(|s| s.len()).unwrap_or(0);
     
-    // Access nested struct fields: person.contact.address.city
-    let city = person.contact.address.city.clone();
+    // Extract city from nested C++ objects
+    let city_string = city.to_str().unwrap_or("Unknown").to_string();
     
+    // Return bridge struct
     ffi::PersonInfo {
         is_adult,
         bmi_category,
         name_length,
-        city,
+        city: city_string,
+    }
+}
+
+/// Perform comprehensive health analysis
+/// 
+/// This demonstrates NEW Rust functionality that works with existing C++ types
+/// In a real scenario, this might use Rust's advanced features:
+/// - Machine learning crates
+/// - Concurrent processing
+/// - Safe data validation
+fn analyze_health(person: &ffi::Person, weight_kg: f64) -> ffi::HealthAnalysis {
+    // Extract data from C++ Person object
+    let age = ffi::get_person_age(person);
+    let height = ffi::get_person_height(person);
+    let contact = ffi::get_person_contact(person);
+    let address = ffi::get_contact_address(contact);
+    let city = ffi::get_address_city(address);
+    
+    // Calculate BMI
+    let bmi = if height > 0.0 {
+        weight_kg / (height * height)
+    } else {
+        0.0
+    };
+    
+    // Complex risk calculation (this is where Rust shines)
+    let age_risk = if age < 18 || age > 65 { 1.5 } else { 1.0 };
+    let bmi_risk = if bmi < 18.5 || bmi > 25.0 { 1.3 } else { 1.0 };
+    
+    // City-based risk factor (demonstrating string processing)
+    let city_str = city.to_str().unwrap_or("");
+    let city_risk = match city_str {
+        "New York" => 1.2,
+        "Los Angeles" => 1.1,
+        _ => 1.0,
+    };
+    
+    let risk_score = age_risk * bmi_risk * city_risk;
+    
+    // Generate recommendation based on analysis
+    let recommendation = if risk_score < 1.2 {
+        "Excellent health profile. Maintain current lifestyle.".to_string()
+    } else if risk_score < 1.5 {
+        "Good health. Consider minor lifestyle adjustments.".to_string()
+    } else {
+        "Elevated risk factors. Recommend consultation with healthcare provider.".to_string()
+    };
+    
+    ffi::HealthAnalysis {
+        bmi,
+        risk_score,
+        recommendation,
+        city_risk_factor: city_risk,
     }
 }
 
 /// Greet a person by name
 /// 
-/// Demonstrates string handling - no manual conversion needed!
+/// Simple function demonstrating string handling
 fn greet_person(name: &str) -> usize {
     if name.is_empty() {
         println!("Hello, stranger!");
@@ -91,7 +194,7 @@ fn greet_person(name: &str) -> usize {
 
 /// Calculate BMI from weight and height
 /// 
-/// Simple function demonstrating passing primitive types
+/// Pure Rust calculation - no C++ interaction
 fn calculate_bmi(weight_kg: f64, height_m: f64) -> f64 {
     if height_m <= 0.0 {
         return 0.0;
@@ -99,61 +202,45 @@ fn calculate_bmi(weight_kg: f64, height_m: f64) -> f64 {
     weight_kg / (height_m * height_m)
 }
 
+/// Validate contact information
+/// 
+/// Demonstrates deep access into nested C++ objects:
+/// ContactInfo -> Address -> fields
+fn validate_contact(contact: &ffi::ContactInfo) -> bool {
+    // Extract data from nested C++ objects
+    let email = ffi::get_contact_email(contact);
+    let phone = ffi::get_contact_phone(contact);
+    let address = ffi::get_contact_address(contact);
+    let city = ffi::get_address_city(address);
+    let postal_code = ffi::get_address_postal_code(address);
+    
+    // Rust validation logic
+    let email_str = email.to_str().unwrap_or("");
+    let phone_str = phone.to_str().unwrap_or("");
+    let city_str = city.to_str().unwrap_or("");
+    let postal_str = postal_code.to_str().unwrap_or("");
+    
+    // Simple validation rules
+    let email_valid = email_str.contains('@') && email_str.len() > 3;
+    let phone_valid = phone_str.len() >= 7;
+    let city_valid = !city_str.is_empty();
+    let postal_valid = postal_str.len() >= 5;
+    
+    email_valid && phone_valid && city_valid && postal_valid
+}
+
+// ============================================================================
+// TESTS
+// ============================================================================
+
 #[cfg(test)]
 mod tests {
-    use super::ffi::{Person, ContactInfo, Address};
     use super::*;
-
-    fn create_test_address(city: &str) -> Address {
-        Address {
-            street: "123 Test St".to_string(),
-            city: city.to_string(),
-            postal_code: "12345".to_string(),
-        }
-    }
-
-    fn create_test_contact(city: &str) -> ContactInfo {
-        ContactInfo {
-            email: "test@example.com".to_string(),
-            phone: "555-1234".to_string(),
-            address: create_test_address(city),
-        }
-    }
-
-    #[test]
-    fn test_process_person_adult() {
-        let person = Person {
-            age: 25,
-            height: 1.70,
-            name: "Alice".to_string(),
-            contact: create_test_contact("New York"),
-        };
-        
-        let info = process_person(&person);
-        assert!(info.is_adult);
-        assert_eq!(info.name_length, 5);
-        assert_eq!(info.city, "New York");
-    }
-
-    #[test]
-    fn test_process_person_minor() {
-        let person = Person {
-            age: 16,
-            height: 1.60,
-            name: "Bob".to_string(),
-            contact: create_test_contact("Boston"),
-        };
-        
-        let info = process_person(&person);
-        assert!(!info.is_adult);
-        assert_eq!(info.name_length, 3);
-        assert_eq!(info.city, "Boston");
-    }
 
     #[test]
     fn test_greet_person() {
-        let length = greet_person("Charlie");
-        assert_eq!(length, 7);
+        let length = greet_person("Alice");
+        assert_eq!(length, 5);
     }
 
     #[test]
@@ -167,18 +254,13 @@ mod tests {
         let bmi = calculate_bmi(70.0, 1.75);
         assert!((bmi - 22.86).abs() < 0.01);
     }
-
+    
     #[test]
-    fn test_nested_struct_access() {
-        let person = Person {
-            age: 30,
-            height: 1.80,
-            name: "Charlie".to_string(),
-            contact: create_test_contact("San Francisco"),
-        };
-        
-        // Test nested field access
-        assert_eq!(person.contact.address.city, "San Francisco");
-        assert_eq!(person.contact.email, "test@example.com");
+    fn test_calculate_bmi_zero_height() {
+        let bmi = calculate_bmi(70.0, 0.0);
+        assert_eq!(bmi, 0.0);
     }
+
+    // Note: Tests involving C++ types would need C++ test framework
+    // or integration tests. Pure Rust functions can be unit tested here.
 }
