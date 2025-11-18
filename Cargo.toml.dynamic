@@ -1,0 +1,22 @@
+# Alternative Cargo.toml for dynamic library (cdylib)
+# To use this:
+#   1. Backup current Cargo.toml: cp rust-lib/Cargo.toml rust-lib/Cargo.toml.static
+#   2. Copy this file: cp Cargo.toml.dynamic rust-lib/Cargo.toml
+#   3. Rebuild: cd rust-lib && cargo build --release
+
+[package]
+name = "rust-lib"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "rust_lib"
+# cdylib = C-compatible dynamic library (.dylib/.so/.dll)
+crate-type = ["cdylib"]
+
+[dependencies]
+cxx = "1.0"
+
+[build-dependencies]
+cxx-build = "1.0"
+

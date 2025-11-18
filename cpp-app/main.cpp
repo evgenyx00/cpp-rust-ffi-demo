@@ -7,6 +7,52 @@
 #include <iostream>
 #include <string>
 #include <memory>
+#include <dlfcn.h>  // For dlopen, dlsym, dlclose (dynamic loading)
+
+// Dynamic library loader class
+class DynamicRustLibrary {
+private:
+    void* handle;
+    
+public:
+    // Function pointer typedefs
+    using calculate_bmi_fn = double(*)(double, double);
+    
+    // Function pointers
+    calculate_bmi_fn calculate_bmi_ptr;
+    
+    DynamicRustLibrary() : handle(nullptr), calculate_bmi_ptr(nullptr) {}
+    
+    ~DynamicRustLibrary() {
+        if (handle) {
+            dlclose(handle);
+        }
+    }
+    
+    bool load(const std::string& library_path) {
+        handle = dlopen(library_path.c_str(), RTLD_LAZY);
+        if (!handle) {
+            std::cerr << "Cannot load library: " << dlerror() << std::endl;
+            return false;
+        }
+        
+        dlerror(); // Clear any existing error
+        
+        // Note: cxx bridge uses C++ name mangling, so symbols are complex
+        // This is for demonstration - actual symbol names would need inspection via 'nm'
+        
+        return true;
+    }
+    
+    bool is_loaded() const {
+        return handle != nullptr;
+    }
+    
+    static void list_symbols(const std::string& library_path) {
+        std::cout << "\nTo inspect library symbols, run:" << std::endl;
+        std::cout << "  nm -gU " << library_path << " | c++filt" << std::endl;
+    }
+};
 
 // Helper function to print PersonInfo results from Rust
 void print_person_info(const PersonInfo& info, const std::string& name) {
@@ -170,6 +216,67 @@ int main() {
     std::cout << "║  This is the RECOMMENDED approach for integrating Rust   ║" << std::endl;
     std::cout << "║  into existing C++ codebases!                            ║" << std::endl;
     std::cout << "╚══════════════════════════════════════════════════════════╝\n" << std::endl;
+    
+    // --- Additional Demo: Runtime Dynamic Loading with dlopen ---
+    std::cout << "\n╔══════════════════════════════════════════════════════════╗" << std::endl;
+    std::cout << "║       Runtime Dynamic Loading Demo (dlopen)              ║" << std::endl;
+    std::cout << "╚══════════════════════════════════════════════════════════╝\n" << std::endl;
+    
+    std::cout << "The above examples used compile-time linking (static or dynamic)." << std::endl;
+    std::cout << "Now demonstrating runtime loading with dlopen...\n" << std::endl;
+    
+    // Determine library path based on platform
+    #ifdef __APPLE__
+        std::string lib_path = "rust-lib/target/release/librust_lib.dylib";
+    #elif defined(_WIN32)
+        std::string lib_path = "rust-lib/target/release/rust_lib.dll";
+    #else
+        std::string lib_path = "rust-lib/target/release/librust_lib.so";
+    #endif
+    
+    DynamicRustLibrary dynamic_lib;
+    std::cout << "Attempting runtime load: " << lib_path << std::endl;
+    
+    if (dynamic_lib.load(lib_path)) {
+        std::cout << "✓ Library loaded at runtime successfully!" << std::endl;
+        
+        std::cout << "\n📝 Notes on Runtime Loading:" << std::endl;
+        std::cout << "  • The library is loaded AFTER the program starts" << std::endl;
+        std::cout << "  • Useful for plugin architectures" << std::endl;
+        std::cout << "  • Challenge: cxx bridge uses C++ name mangling" << std::endl;
+        std::cout << "  • Solution: Add extern \"C\" wrappers in Rust" << std::endl;
+        
+        DynamicRustLibrary::list_symbols(lib_path);
+        
+    } else {
+        std::cout << "ℹ Runtime loading failed (this is expected)" << std::endl;
+        std::cout << "  Current demo uses compile-time linking instead." << std::endl;
+        std::cout << "  See DYNAMIC_LINKING.md for runtime loading details." << std::endl;
+    }
+    
+    std::cout << "\n╔══════════════════════════════════════════════════════════╗" << std::endl;
+    std::cout << "║                  Linking Comparison                       ║" << std::endl;
+    std::cout << "╚══════════════════════════════════════════════════════════╝" << std::endl;
+    
+    std::cout << "\n1. Static Linking (current default):" << std::endl;
+    std::cout << "   • Rust code compiled INTO executable" << std::endl;
+    std::cout << "   • Single file distribution" << std::endl;
+    std::cout << "   • No runtime dependencies" << std::endl;
+    
+    std::cout << "\n2. Dynamic Linking:" << std::endl;
+    std::cout << "   • Separate .dylib/.so/.dll file" << std::endl;
+    std::cout << "   • Smaller executable" << std::endl;
+    std::cout << "   • Can update library without recompiling" << std::endl;
+    std::cout << "   • Change Cargo.toml: crate-type = [\"cdylib\"]" << std::endl;
+    std::cout << "   • Update CMakeLists.txt to use SHARED IMPORTED" << std::endl;
+    
+    std::cout << "\n3. Runtime Loading (dlopen - advanced):" << std::endl;
+    std::cout << "   • Load libraries conditionally" << std::endl;
+    std::cout << "   • Plugin-style architecture" << std::endl;
+    std::cout << "   • Requires extern \"C\" wrappers with cxx" << std::endl;
+    
+    std::cout << "\n💡 Recommendation: Use dynamic linking (option 2)" << std::endl;
+    std::cout << "   See DYNAMIC_LINKING.md for detailed instructions" << std::endl;
     
     return 0;
 }
